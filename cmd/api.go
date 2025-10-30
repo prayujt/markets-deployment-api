@@ -23,7 +23,7 @@ func main() {
 	handler := api.NewClientEnvironment()
 	defer handler.QueueClient.Close()
 	log := handler.Log
-	router.HandleFunc("/deploy-market", handler.DeployHandler).Methods("POST")
+	router.HandleFunc("/deploy-market", handler.QueueDeploymentRequest).Methods("POST")
 	// router.HandleFunc("/queue-?", handler.GetSomething).Methods("GET")
 
 	port := os.Getenv("API_PORT")

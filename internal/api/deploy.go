@@ -2,26 +2,43 @@ package api
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 
 	"github.com/hibiken/asynq"
 
 	"markets-api/internal/constants"
+	"markets-api/internal/models"
 	"markets-api/internal/services"
 )
 
-func (h *ClientEnvironment) DeployHandler(w http.ResponseWriter, r *http.Request) {
-	log := h.Log
-	log.Info("deploy endpoint called")
+func (env *ClientEnvironment) QueueDeploymentRequest(w http.ResponseWriter, r *http.Request) {
+	var req models.MarketDeployRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, fmt.Sprintf("could not decode reqeust body: %v", err), http.StatusBadRequest)
+		return
+	}
+	// TODO: add cleaner validator
+	if req.QuestionID == "" || req.ConditionID == "" || req.PositionIDYes == "" || req.PositionIDNo == "" {
+		http.Error(w, "missing required fields in request body", http.StatusBadRequest)
+		return
+	}
+	env.Log = env.Log.With("questionID", req.QuestionID, "conditionID", req.ConditionID)
+	env.Log.Info("queuing deployment request", "questionID", req.QuestionID, "conditionID", req.ConditionID)
 
-	services.PushToQueue(h.QueueClient, constants.MarketDeploymentQueue, "hello")
+	// set separate status tracking key
+	services.SetKey(env.RedisClient, fmt.Sprintf(constants.MarketDeploymentStatusFormat, req.QuestionID), constants.MarketDeploymentStatusQueued)
+
+	// enqueue task
+	services.PushToQueue(env.QueueClient, constants.MarketDeploymentQueueName, req)
 
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"message":"deploy triggered"}`))
 }
 
-func (h *ServerEnvironment) DeployHandler(ctx context.Context, t *asynq.Task) error {
-	log := h.Log
+func (env *ServerEnvironment) ProcessDeploymentRequest(ctx context.Context, t *asynq.Task) error {
+	log := env.Log
 
 	log.Info("processing deployment task", "payload", string(t.Payload()))
 

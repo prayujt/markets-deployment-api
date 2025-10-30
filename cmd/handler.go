@@ -14,7 +14,7 @@ func main() {
 	log := env.Log
 
 	mux := asynq.NewServeMux()
-	mux.HandleFunc(constants.MarketDeploymentQueue, env.DeployHandler)
+	mux.HandleFunc(constants.MarketDeploymentQueueName, env.ProcessDeploymentRequest)
 
 	if err := env.QueueServer.Run(mux); err != nil {
 		log.Error("could not run server: %v", err)

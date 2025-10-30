@@ -11,7 +11,8 @@ import (
 )
 
 type BaseEnvironment struct {
-	Log *slog.Logger
+	Log         *slog.Logger
+	RedisClient *redis.Client
 }
 
 type ClientEnvironment struct {
@@ -30,46 +31,39 @@ func NewEnvironment() BaseEnvironment {
 		Level: lvl,
 	})
 	base := slog.New(h)
-	return BaseEnvironment{Log: base}
+
+	redisClient := redis.NewClient(&redis.Options{
+		Addr:     "localhost:6379",
+		Password: "",
+		DB:       0,
+		// weird version issues, just disabling for now
+		MaintNotificationsConfig: &maintnotifications.Config{
+			Mode: maintnotifications.ModeDisabled,
+		},
+	})
+
+	return BaseEnvironment{Log: base, RedisClient: redisClient}
 }
 
 func NewClientEnvironment() *ClientEnvironment {
-	redisClient := redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379",
-		Password: "",
-		DB:       0,
-		// weird version issues, just disabling for now
-		MaintNotificationsConfig: &maintnotifications.Config{
-			Mode: maintnotifications.ModeDisabled,
-		},
-	})
-
-	client := asynq.NewClientFromRedisClient(redisClient)
+	env := NewEnvironment()
+	client := asynq.NewClientFromRedisClient(env.RedisClient)
 	client.Ping()
 
-	return &ClientEnvironment{BaseEnvironment: NewEnvironment(), QueueClient: client}
+	return &ClientEnvironment{BaseEnvironment: env, QueueClient: client}
 }
 
 func NewServerEnvironment() *ServerEnvironment {
-	redisClient := redis.NewClient(&redis.Options{
-		Addr:     "localhost:6379",
-		Password: "",
-		DB:       0,
-		// weird version issues, just disabling for now
-		MaintNotificationsConfig: &maintnotifications.Config{
-			Mode: maintnotifications.ModeDisabled,
-		},
-	})
-
+	env := NewEnvironment()
 	srv := asynq.NewServerFromRedisClient(
-		redisClient,
+		env.RedisClient,
 		asynq.Config{
 			Concurrency: 10,
 		},
 	)
 	srv.Ping()
 
-	return &ServerEnvironment{BaseEnvironment: NewEnvironment(), QueueServer: srv}
+	return &ServerEnvironment{BaseEnvironment: env, QueueServer: srv}
 }
 
 func parseLevel(s string) slog.Leveler {
