@@ -33,6 +33,19 @@ func (q *Queries) CreateDeployment(ctx context.Context, arg CreateDeploymentPara
 	return err
 }
 
+const getDeploymentStatus = `-- name: GetDeploymentStatus :one
+SELECT status
+FROM deployments
+WHERE question_id = $1
+`
+
+func (q *Queries) GetDeploymentStatus(ctx context.Context, questionID string) (string, error) {
+	row := q.db.QueryRowContext(ctx, getDeploymentStatus, questionID)
+	var status string
+	err := row.Scan(&status)
+	return status, err
+}
+
 const updateDeploymentStatus = `-- name: UpdateDeploymentStatus :exec
 UPDATE deployments
 SET status = $2

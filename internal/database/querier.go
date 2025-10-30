@@ -10,6 +10,7 @@ import (
 
 type Querier interface {
 	CreateDeployment(ctx context.Context, arg CreateDeploymentParams) error
+	GetDeploymentStatus(ctx context.Context, questionID string) (string, error)
 	UpdateDeploymentStatus(ctx context.Context, arg UpdateDeploymentStatusParams) error
 }
 

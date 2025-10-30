@@ -8,6 +8,6 @@ type MarketDeployRequest struct {
 }
 
 type DeploymentStatusResponse struct {
-	QuestionID string  `json:"questionId"`
-	Status     *string `json:"status"`
+	QuestionID string `json:"questionId"`
+	Status     string `json:"status"`
 }

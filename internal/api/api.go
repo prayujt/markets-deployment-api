@@ -19,9 +19,14 @@ func (env *ClientEnvironment) GetDeploymentStatus(w http.ResponseWriter, r *http
 	vars := mux.Vars(r)
 
 	questionID := vars["questionID"]
-	status, err := services.GetKey[string](env.RedisClient, fmt.Sprintf(constants.MarketDeploymentStatusFormat, questionID))
+	// status, err := services.GetKey[string](env.RedisClient, fmt.Sprintf(constants.MarketDeploymentStatusFormat, questionID))
+	// if err != nil {
+	// http.Error(w, fmt.Sprintf("invalid questionId: %v", err), http.StatusNotFound)
+	// return
+	// }
+	status, err := env.Queries.GetDeploymentStatus(context.Background(), questionID)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("invalid questionId: %v", err), http.StatusNotFound)
+		http.Error(w, fmt.Sprintf("could not get deployment status: %v", err), http.StatusInternalServerError)
 		return
 	}
 
@@ -46,8 +51,14 @@ func (env *ClientEnvironment) QueueDeploymentRequest(w http.ResponseWriter, r *h
 	env.Log = env.Log.With("questionID", req.QuestionID, "conditionID", req.ConditionID)
 	env.Log.Info("queuing deployment request", "questionID", req.QuestionID, "conditionID", req.ConditionID)
 
-	// set separate status tracking key
-	services.SetKey(env.RedisClient, fmt.Sprintf(constants.MarketDeploymentStatusFormat, req.QuestionID), constants.MarketDeploymentStatusQueued)
+	// initialize deployment record
+	env.Queries.CreateDeployment(context.Background(), database.CreateDeploymentParams{
+		QuestionID:    req.QuestionID,
+		ConditionID:   req.ConditionID,
+		PositionIDYes: req.PositionIDYes,
+		PositionIDNo:  req.PositionIDNo,
+		Status:        string(constants.MarketDeploymentStatusQueued),
+	})
 
 	// enqueue task
 	services.PushToQueue(env.QueueClient, constants.MarketDeploymentQueueName, req)
@@ -67,12 +78,9 @@ func (env *ServerEnvironment) ProcessDeploymentRequest(ctx context.Context, t *a
 		return fmt.Errorf("could not decode task payload: %v", err)
 	}
 
-	env.Queries.CreateDeployment(context.Background(), database.CreateDeploymentParams{
-		QuestionID:    req.QuestionID,
-		ConditionID:   req.ConditionID,
-		PositionIDYes: req.PositionIDYes,
-		PositionIDNo:  req.PositionIDNo,
-		Status:        string(constants.MarketDeploymentStatusQueued),
+	env.Queries.UpdateDeploymentStatus(context.Background(), database.UpdateDeploymentStatusParams{
+		QuestionID: req.QuestionID,
+		Status:     string(constants.MarketDeploymentStatusDeploying),
 	})
 
 	err := services.DeployMarket(log, env.ContractHTTP, env.ContractAuth, &req)

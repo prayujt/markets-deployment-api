@@ -18,6 +18,7 @@ func PushToQueue(client *asynq.Client, queueName string, payload any) error {
 	return err
 }
 
+// UNUSED
 func SetKey(client *redis.Client, key string, value any) error {
 	data, err := json.Marshal(value)
 	if err != nil {

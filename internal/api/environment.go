@@ -25,6 +25,7 @@ import (
 type BaseEnvironment struct {
 	Log         *slog.Logger
 	RedisClient *redis.Client
+	Queries     *database.Queries
 }
 
 type ClientEnvironment struct {
@@ -35,7 +36,6 @@ type ClientEnvironment struct {
 type ServerEnvironment struct {
 	BaseEnvironment
 	QueueServer  *asynq.Server
-	Queries      *database.Queries
 	ContractHTTP *contracts.Contracts
 	ContractWS   *contracts.Contracts
 	ContractAuth *bind.TransactOpts
@@ -58,7 +58,28 @@ func NewEnvironment() BaseEnvironment {
 		},
 	})
 
-	return BaseEnvironment{Log: base, RedisClient: redisClient}
+	dsn := fmt.Sprintf(
+		"postgresql://%s:%s@%s:5432/%s?sslmode=disable",
+		os.Getenv("PSQL_USERNAME"),
+		os.Getenv("PSQL_PASSWORD"),
+		os.Getenv("PSQL_HOST"),
+		os.Getenv("PSQL_DATABASE"),
+	)
+
+	var err error
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		base.Error("failed to open DB connection", "error", err)
+		os.Exit(1)
+	}
+
+	if err := db.Ping(); err != nil {
+		base.Error("failed to ping DB", "error", err)
+		os.Exit(1)
+	}
+	queries := database.New(db)
+
+	return BaseEnvironment{Log: base, RedisClient: redisClient, Queries: queries}
 }
 
 func NewClientEnvironment() *ClientEnvironment {
@@ -78,27 +99,6 @@ func NewServerEnvironment() *ServerEnvironment {
 		},
 	)
 	srv.Ping()
-
-	dsn := fmt.Sprintf(
-		"postgresql://%s:%s@%s:5432/%s?sslmode=disable",
-		os.Getenv("PSQL_USERNAME"),
-		os.Getenv("PSQL_PASSWORD"),
-		os.Getenv("PSQL_HOST"),
-		os.Getenv("PSQL_DATABASE"),
-	)
-
-	var err error
-	db, err := sql.Open("postgres", dsn)
-	if err != nil {
-		env.Log.Error("failed to open DB connection", "error", err)
-		os.Exit(1)
-	}
-
-	if err := db.Ping(); err != nil {
-		env.Log.Error("failed to ping DB", "error", err)
-		os.Exit(1)
-	}
-	queries := database.New(db)
 
 	httpURL := os.Getenv("ETH_HTTP_RPC")
 	wsURL := os.Getenv("ETH_WS_RPC")
@@ -156,7 +156,7 @@ func NewServerEnvironment() *ServerEnvironment {
 		}
 	}
 
-	return &ServerEnvironment{BaseEnvironment: env, QueueServer: srv, Queries: queries, ContractHTTP: contractHTTP, ContractWS: contractWS, ContractAuth: contractAuth}
+	return &ServerEnvironment{BaseEnvironment: env, QueueServer: srv, ContractHTTP: contractHTTP, ContractWS: contractWS, ContractAuth: contractAuth}
 }
 
 func parseLevel(s string) slog.Leveler {
