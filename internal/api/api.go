@@ -11,9 +11,30 @@ import (
 
 	"markets-api/internal/constants"
 	"markets-api/internal/database"
+	"markets-api/internal/environment"
 	"markets-api/internal/models"
 	"markets-api/internal/services"
 )
+
+type ClientEnvironment struct {
+	*environment.ClientEnvironment
+}
+
+type ServerEnvironment struct {
+	*environment.ServerEnvironment
+}
+
+func NewClientEnvironment() *ClientEnvironment {
+	return &ClientEnvironment{
+		ClientEnvironment: environment.NewClientEnvironment(),
+	}
+}
+
+func NewServerEnvironment() *ServerEnvironment {
+	return &ServerEnvironment{
+		ServerEnvironment: environment.NewServerEnvironment(),
+	}
+}
 
 func (env *ClientEnvironment) GetDeploymentStatus(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
@@ -56,7 +77,7 @@ func (env *ClientEnvironment) QueueDeploymentRequest(w http.ResponseWriter, r *h
 	})
 
 	// enqueue task
-	services.PushToQueue(env.QueueClient, constants.MarketDeploymentQueueName, req)
+	services.PushToQueue(env.ClientEnvironment, constants.MarketDeploymentQueueName, req)
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"message": "deploy request queued"})
@@ -79,7 +100,7 @@ func (env *ServerEnvironment) ProcessDeploymentRequest(ctx context.Context, t *a
 		Status:     string(constants.MarketDeploymentStatusDeploying),
 	})
 
-	err := services.DeployMarket(log, env.ContractHTTP, env.ContractAuth, &req)
+	err := services.DeployMarket(env.ServerEnvironment, &req)
 	if err != nil {
 		log.Error("failed to deploy market", "error", err)
 		return err

@@ -22,7 +22,7 @@ func main() {
 		log.Info("starting market deployment event listener")
 		// cap buffer size at 128
 		marketDeployments := make(chan *contracts.ContractsMarketDeployed, 128)
-		sub, err := services.SubscribeMarketDeployments(log, env.ContractWS, marketDeployments)
+		sub, err := services.SubscribeMarketDeployments(env.ServerEnvironment, marketDeployments)
 		if err != nil {
 			log.Error("could not subscribe to market deployments: %v", err)
 			os.Exit(1)
@@ -35,7 +35,7 @@ func main() {
 				log.Info("questionID not in deployment set, skipping", "questionID", event.QuestionId)
 				continue
 			}
-			services.CompleteMarketDeployment(log, env.Queries, event.QuestionId)
+			services.CompleteMarketDeployment(env.ServerEnvironment, event.QuestionId)
 		}
 	}()
 
