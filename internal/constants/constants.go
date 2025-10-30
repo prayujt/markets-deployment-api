@@ -9,5 +9,5 @@ type MarketDeploymentStatus string
 const (
 	MarketDeploymentStatusQueued    MarketDeploymentStatus = "QUEUED"
 	MarketDeploymentStatusDeploying MarketDeploymentStatus = "DEPLOYING"
-	MarketDeploymentStatusComplete  MarketDeploymentStatus = "COMPLETE"
+	MarketDeploymentStatusDeployed  MarketDeploymentStatus = "DEPLOYED"
 )

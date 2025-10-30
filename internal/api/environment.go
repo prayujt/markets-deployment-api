@@ -1,17 +1,24 @@
 package api
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"log/slog"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/ethereum/go-ethereum/accounts/abi/bind"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
+	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/hibiken/asynq"
 	_ "github.com/lib/pq"
 	"github.com/redis/go-redis/v9"
 	"github.com/redis/go-redis/v9/maintnotifications"
 
+	"markets-api/internal/contracts"
 	"markets-api/internal/database"
 )
 
@@ -27,8 +34,11 @@ type ClientEnvironment struct {
 
 type ServerEnvironment struct {
 	BaseEnvironment
-	QueueServer *asynq.Server
-	Queries     *database.Queries
+	QueueServer  *asynq.Server
+	Queries      *database.Queries
+	ContractHTTP *contracts.Contracts
+	ContractWS   *contracts.Contracts
+	ContractAuth *bind.TransactOpts
 }
 
 func NewEnvironment() BaseEnvironment {
@@ -88,10 +98,65 @@ func NewServerEnvironment() *ServerEnvironment {
 		env.Log.Error("failed to ping DB", "error", err)
 		os.Exit(1)
 	}
-
 	queries := database.New(db)
 
-	return &ServerEnvironment{BaseEnvironment: env, QueueServer: srv, Queries: queries}
+	httpURL := os.Getenv("ETH_HTTP_RPC")
+	wsURL := os.Getenv("ETH_WS_RPC")
+	contractAddress := os.Getenv("MARKETS_CONTRACT")
+	privateKey := os.Getenv("ETH_PRIVATE_KEY")
+	if httpURL == "" || wsURL == "" || contractAddress == "" || privateKey == "" {
+		env.Log.Error("missing required ETH environment variables")
+		os.Exit(1)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	httpClient, err := ethclient.DialContext(ctx, httpURL)
+	if err != nil {
+		env.Log.Error("eth http dial failed", "err", err)
+		os.Exit(1)
+	}
+	ctx, cancel = context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	wsClient, err := ethclient.DialContext(ctx, wsURL)
+	if err != nil {
+		env.Log.Error("eth ws dial failed", "err", err)
+		os.Exit(1)
+	}
+
+	contractAddr := common.HexToAddress(contractAddress)
+	contractHTTP, err := contracts.NewContracts(contractAddr, httpClient)
+	if err != nil {
+		env.Log.Error("failed http contract", "error", err)
+		os.Exit(1)
+	}
+	contractWS, err := contracts.NewContracts(contractAddr, wsClient)
+	if err != nil {
+		env.Log.Error("failed ws contract", "error", err)
+		os.Exit(1)
+	}
+
+	ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+	chainID, cidErr := httpClient.ChainID(ctx)
+	cancel()
+	var contractAuth *bind.TransactOpts
+	if cidErr != nil {
+		env.Log.Error("get chain id failed", "err", cidErr)
+	} else {
+		key, keyErr := crypto.HexToECDSA(strings.TrimPrefix(privateKey, "0x"))
+		if keyErr != nil {
+			env.Log.Error("bad private key", "err", keyErr)
+		} else {
+			contractAuth, err = bind.NewKeyedTransactorWithChainID(key, chainID)
+			if err != nil {
+				env.Log.Error("transactor create failed", "err", err)
+			}
+		}
+	}
+
+	return &ServerEnvironment{BaseEnvironment: env, QueueServer: srv, Queries: queries, ContractHTTP: contractHTTP, ContractWS: contractWS, ContractAuth: contractAuth}
 }
 
 func parseLevel(s string) slog.Leveler {

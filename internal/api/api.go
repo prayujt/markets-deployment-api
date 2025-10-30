@@ -21,7 +21,7 @@ func (env *ClientEnvironment) GetDeploymentStatus(w http.ResponseWriter, r *http
 	questionID := vars["questionID"]
 	status, err := services.GetKey[string](env.RedisClient, fmt.Sprintf(constants.MarketDeploymentStatusFormat, questionID))
 	if err != nil {
-		http.Error(w, fmt.Sprintf("could not get deployment status: %v", err), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("invalid questionId: %v", err), http.StatusNotFound)
 		return
 	}
 
@@ -66,6 +66,7 @@ func (env *ServerEnvironment) ProcessDeploymentRequest(ctx context.Context, t *a
 	if err := json.Unmarshal(t.Payload(), &req); err != nil {
 		return fmt.Errorf("could not decode task payload: %v", err)
 	}
+
 	env.Queries.CreateDeployment(context.Background(), database.CreateDeploymentParams{
 		QuestionID:    req.QuestionID,
 		ConditionID:   req.ConditionID,
@@ -73,6 +74,12 @@ func (env *ServerEnvironment) ProcessDeploymentRequest(ctx context.Context, t *a
 		PositionIDNo:  req.PositionIDNo,
 		Status:        string(constants.MarketDeploymentStatusQueued),
 	})
+
+	err := services.DeployMarket(log, env.ContractHTTP, env.ContractAuth, &req)
+	if err != nil {
+		log.Error("failed to deploy market", "error", err)
+		return err
+	}
 
 	return nil
 }
