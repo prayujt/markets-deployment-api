@@ -20,9 +20,10 @@ func main() {
 		w.Write([]byte(`{"status":"ok"}`))
 	}).Methods("GET")
 
-	handler := api.NewHandler()
+	handler := api.NewClientEnvironment()
+	defer handler.QueueClient.Close()
 	log := handler.Log
-	router.HandleFunc("/deploy", handler.DeployHandler).Methods("POST")
+	router.HandleFunc("/deploy-market", handler.DeployHandler).Methods("POST")
 	// router.HandleFunc("/queue-?", handler.GetSomething).Methods("GET")
 
 	port := os.Getenv("API_PORT")
