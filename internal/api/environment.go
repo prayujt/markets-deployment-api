@@ -1,13 +1,18 @@
 package api
 
 import (
+	"database/sql"
+	"fmt"
 	"log/slog"
 	"os"
 	"strings"
 
 	"github.com/hibiken/asynq"
+	_ "github.com/lib/pq"
 	"github.com/redis/go-redis/v9"
 	"github.com/redis/go-redis/v9/maintnotifications"
+
+	"markets-api/internal/database"
 )
 
 type BaseEnvironment struct {
@@ -23,6 +28,7 @@ type ClientEnvironment struct {
 type ServerEnvironment struct {
 	BaseEnvironment
 	QueueServer *asynq.Server
+	Queries     *database.Queries
 }
 
 func NewEnvironment() BaseEnvironment {
@@ -63,7 +69,29 @@ func NewServerEnvironment() *ServerEnvironment {
 	)
 	srv.Ping()
 
-	return &ServerEnvironment{BaseEnvironment: env, QueueServer: srv}
+	dsn := fmt.Sprintf(
+		"postgresql://%s:%s@%s:5432/%s?sslmode=disable",
+		os.Getenv("PSQL_USERNAME"),
+		os.Getenv("PSQL_PASSWORD"),
+		os.Getenv("PSQL_HOST"),
+		os.Getenv("PSQL_DATABASE"),
+	)
+
+	var err error
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		env.Log.Error("failed to open DB connection", "error", err)
+		os.Exit(1)
+	}
+
+	if err := db.Ping(); err != nil {
+		env.Log.Error("failed to ping DB", "error", err)
+		os.Exit(1)
+	}
+
+	queries := database.New(db)
+
+	return &ServerEnvironment{BaseEnvironment: env, QueueServer: srv, Queries: queries}
 }
 
 func parseLevel(s string) slog.Leveler {

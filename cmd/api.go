@@ -24,7 +24,7 @@ func main() {
 	defer handler.QueueClient.Close()
 	log := handler.Log
 	router.HandleFunc("/deploy-market", handler.QueueDeploymentRequest).Methods("POST")
-	// router.HandleFunc("/queue-?", handler.GetSomething).Methods("GET")
+	router.HandleFunc("/deployments/{questionID}", handler.GetDeploymentStatus).Methods("GET")
 
 	port := os.Getenv("API_PORT")
 	server := &http.Server{

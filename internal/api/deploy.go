@@ -6,12 +6,31 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/gorilla/mux"
 	"github.com/hibiken/asynq"
 
 	"markets-api/internal/constants"
+	"markets-api/internal/database"
 	"markets-api/internal/models"
 	"markets-api/internal/services"
 )
+
+func (env *ClientEnvironment) GetDeploymentStatus(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+
+	questionID := vars["questionID"]
+	status, err := services.GetKey[string](env.RedisClient, fmt.Sprintf(constants.MarketDeploymentStatusFormat, questionID))
+	if err != nil {
+		http.Error(w, fmt.Sprintf("could not get deployment status: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	res := models.DeploymentStatusResponse{
+		QuestionID: questionID,
+		Status:     status,
+	}
+	json.NewEncoder(w).Encode(res)
+}
 
 func (env *ClientEnvironment) QueueDeploymentRequest(w http.ResponseWriter, r *http.Request) {
 	var req models.MarketDeployRequest
@@ -41,6 +60,19 @@ func (env *ServerEnvironment) ProcessDeploymentRequest(ctx context.Context, t *a
 	log := env.Log
 
 	log.Info("processing deployment task", "payload", string(t.Payload()))
+
+	var req models.MarketDeployRequest
+
+	if err := json.Unmarshal(t.Payload(), &req); err != nil {
+		return fmt.Errorf("could not decode task payload: %v", err)
+	}
+	env.Queries.CreateDeployment(context.Background(), database.CreateDeploymentParams{
+		QuestionID:    req.QuestionID,
+		ConditionID:   req.ConditionID,
+		PositionIDYes: req.PositionIDYes,
+		PositionIDNo:  req.PositionIDNo,
+		Status:        string(constants.MarketDeploymentStatusQueued),
+	})
 
 	return nil
 }
