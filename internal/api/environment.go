@@ -20,6 +20,7 @@ import (
 
 	"markets-api/internal/contracts"
 	"markets-api/internal/database"
+	"markets-api/internal/utils"
 )
 
 type BaseEnvironment struct {
@@ -35,10 +36,11 @@ type ClientEnvironment struct {
 
 type ServerEnvironment struct {
 	BaseEnvironment
-	QueueServer  *asynq.Server
-	ContractHTTP *contracts.Contracts
-	ContractWS   *contracts.Contracts
-	ContractAuth *bind.TransactOpts
+	QuestionIDSet *utils.Set
+	QueueServer   *asynq.Server
+	ContractHTTP  *contracts.Contracts
+	ContractWS    *contracts.Contracts
+	ContractAuth  *bind.TransactOpts
 }
 
 func NewEnvironment() BaseEnvironment {
@@ -156,7 +158,7 @@ func NewServerEnvironment() *ServerEnvironment {
 		}
 	}
 
-	return &ServerEnvironment{BaseEnvironment: env, QueueServer: srv, ContractHTTP: contractHTTP, ContractWS: contractWS, ContractAuth: contractAuth}
+	return &ServerEnvironment{BaseEnvironment: env, QueueServer: srv, ContractHTTP: contractHTTP, ContractWS: contractWS, ContractAuth: contractAuth, QuestionIDSet: utils.NewSet()}
 }
 
 func parseLevel(s string) slog.Leveler {

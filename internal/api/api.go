@@ -19,11 +19,6 @@ func (env *ClientEnvironment) GetDeploymentStatus(w http.ResponseWriter, r *http
 	vars := mux.Vars(r)
 
 	questionID := vars["questionID"]
-	// status, err := services.GetKey[string](env.RedisClient, fmt.Sprintf(constants.MarketDeploymentStatusFormat, questionID))
-	// if err != nil {
-	// http.Error(w, fmt.Sprintf("invalid questionId: %v", err), http.StatusNotFound)
-	// return
-	// }
 	status, err := env.Queries.GetDeploymentStatus(context.Background(), questionID)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("could not get deployment status: %v", err), http.StatusInternalServerError)
@@ -64,20 +59,21 @@ func (env *ClientEnvironment) QueueDeploymentRequest(w http.ResponseWriter, r *h
 	services.PushToQueue(env.QueueClient, constants.MarketDeploymentQueueName, req)
 
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"message":"deploy triggered"}`))
+	json.NewEncoder(w).Encode(map[string]string{"message": "deploy request queued"})
 }
 
 func (env *ServerEnvironment) ProcessDeploymentRequest(ctx context.Context, t *asynq.Task) error {
 	log := env.Log
-
-	log.Info("processing deployment task", "payload", string(t.Payload()))
+	log.Info("processing deployment task")
 
 	var req models.MarketDeployRequest
-
 	if err := json.Unmarshal(t.Payload(), &req); err != nil {
 		return fmt.Errorf("could not decode task payload: %v", err)
 	}
+	// add to set to track active deployments from this instance
+	env.QuestionIDSet.Add(req.QuestionID)
 
+	// update deployment status to deploying
 	env.Queries.UpdateDeploymentStatus(context.Background(), database.UpdateDeploymentStatusParams{
 		QuestionID: req.QuestionID,
 		Status:     string(constants.MarketDeploymentStatusDeploying),

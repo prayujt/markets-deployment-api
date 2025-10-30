@@ -31,6 +31,10 @@ func main() {
 
 		for event := range marketDeployments {
 			log.Info("received MarketDeployed event", "questionID", event.QuestionId)
+			if !env.QuestionIDSet.Contains(event.QuestionId) {
+				log.Info("questionID not in deployment set, skipping", "questionID", event.QuestionId)
+				continue
+			}
 			services.CompleteMarketDeployment(log, env.Queries, event.QuestionId)
 		}
 	}()
