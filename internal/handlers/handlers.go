@@ -40,7 +40,22 @@ func (env *ClientEnvironment) QueueDeploymentRequest(w http.ResponseWriter, r *h
 		http.Error(w, "missing required fields in request body", http.StatusBadRequest)
 		return
 	}
-	// TODO: do we need to validate market id existence before enqueuing?
+
+	marketExists, err := services.GetKey[bool](&env.ClientEnvironment.BaseEnvironment, fmt.Sprintf(constants.MarketRedisKeyFormat, req.MarketID))
+	if err != nil {
+		http.Error(w, fmt.Sprintf("could not check market existence: %v", err), http.StatusInternalServerError)
+		return
+	}
+	if marketExists != nil && *marketExists {
+		http.Error(w, "market is already pending deployment or deployed", http.StatusBadRequest)
+		return
+	}
+
+	err = services.SetKey(&env.ClientEnvironment.BaseEnvironment, fmt.Sprintf(constants.MarketRedisKeyFormat, req.MarketID), true)
+	if err != nil {
+		env.Log.Warn("failed to set deployment status in redis", "error", err)
+	}
+
 	env.LogWith("market_id", req.MarketID)
 	env.Log.Info("queuing deployment request")
 
@@ -48,7 +63,8 @@ func (env *ClientEnvironment) QueueDeploymentRequest(w http.ResponseWriter, r *h
 	env.Queries.SetMarketPendingDeployment(context.Background(), req.MarketID)
 
 	// enqueue task
-	services.PushToQueue(&env.ClientEnvironment.BaseEnvironment, constants.MarketDeploymentQueueName, req)
+	retryCount := 3
+	services.PushToQueue(&env.ClientEnvironment.BaseEnvironment, constants.MarketDeploymentQueueName, req, &retryCount)
 
 	json.NewEncoder(w).Encode(map[string]string{"message": "market deployment queued"})
 }
@@ -63,7 +79,11 @@ func (env *ServerEnvironment) ProcessDeploymentRequest(ctx context.Context, t *a
 	}
 
 	// update deployment status to deploying
-	env.Queries.SetMarketDeploying(context.Background(), req.MarketID)
+	err := env.Queries.SetMarketDeploying(context.Background(), req.MarketID)
+	if err != nil {
+		log.Error("failed to update market status to deploying", "error", err)
+		return err
+	}
 
 	tx, err := services.RunAdapterInitialize(env.ServerEnvironment, &req)
 	if err != nil {
@@ -74,7 +94,7 @@ func (env *ServerEnvironment) ProcessDeploymentRequest(ctx context.Context, t *a
 	services.PushToQueue(&env.ServerEnvironment.BaseEnvironment, constants.TransactionMonitorQueueName, models.TransactionMonitorRequest{
 		MarketID:       req.MarketID,
 		TransactionHex: tx,
-	})
+	}, nil)
 
 	return nil
 }

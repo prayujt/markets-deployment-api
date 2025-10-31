@@ -36,7 +36,11 @@ func NewNonceManager(client *ethclient.Client, addr common.Address, log *slog.Lo
 	}, nil
 }
 
-func (m *NonceManager) NextBlock(ctx context.Context, k uint64) (start int64, err error) {
+func (m *NonceManager) NextNonce(ctx context.Context) (int64, error) {
+	return m.NextKNonce(ctx, 1)
+}
+
+func (m *NonceManager) NextKNonce(ctx context.Context, k uint64) (start int64, err error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 

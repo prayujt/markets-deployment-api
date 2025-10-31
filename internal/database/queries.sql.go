@@ -13,7 +13,7 @@ import (
 )
 
 const getMarketByID = `-- name: GetMarketByID :one
-SELECT id, question, description, outcomes, question_id, condition_id, clob_token_ids, pending_deployment, deploying, deploying_timestamp, deployed_timestamp
+SELECT id, question, description, outcomes, uma_bond, uma_reward, question_id, condition_id, clob_token_ids, pending_deployment, deploying, deploying_timestamp, deployed_timestamp
 FROM markets
 WHERE id = $1
 `
@@ -26,6 +26,8 @@ func (q *Queries) GetMarketByID(ctx context.Context, id string) (Market, error) 
 		&i.Question,
 		&i.Description,
 		&i.Outcomes,
+		&i.UmaBond,
+		&i.UmaReward,
 		&i.QuestionID,
 		&i.ConditionID,
 		&i.ClobTokenIds,

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"strconv"
 	"time"
 
 	"github.com/ethereum/go-ethereum"
@@ -22,6 +23,41 @@ import (
 	"markets-api/internal/utils"
 )
 
+func ResetAllowance(env *environment.ServerEnvironment) error {
+	allow, err := env.USDC.Allowance(&bind.CallOpts{Context: context.Background()}, env.ContractAuth.From, common.HexToAddress(constants.AdapterAddressHex))
+	if err != nil {
+		env.Log.Error("allowance check failed", "err", err)
+		return err
+	}
+
+	maxAllowance := new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(1))
+	if allow.Cmp(maxAllowance) < 0 {
+		nonce, err := env.NonceManager.NextNonce(context.Background())
+		if err != nil {
+			env.Log.Error("failed to get nonce for initialize tx", "err", err)
+			return err
+		}
+		opts := *env.ContractAuth
+		opts.Nonce = big.NewInt(nonce)
+
+		env.Log.Info("current allowance not at max, making approve request", "current", allow.String(), "max", maxAllowance.String())
+		txApprove, err := env.USDC.Approve(&opts, common.HexToAddress(constants.AdapterAddressHex), maxAllowance)
+		if err != nil {
+			env.Log.Error("approve failed", "err", err)
+			return err
+		}
+		env.Log.Info("approve tx sent", "tx", txApprove.Hash().Hex())
+
+		if _, err := bind.WaitMined(context.Background(), env.EthHTTP, txApprove); err != nil {
+			env.Log.Error("approve tx failed to mine", "err", err)
+			return err
+		}
+	} else {
+		env.Log.Info("allowance is at max, no need to reset")
+	}
+	return nil
+}
+
 func RunAdapterInitialize(env *environment.ServerEnvironment, market *models.MarketDeployRequest) (string, error) {
 	marketData, err := env.Queries.GetMarketByID(context.Background(), market.MarketID)
 	if err != nil {
@@ -29,59 +65,35 @@ func RunAdapterInitialize(env *environment.ServerEnvironment, market *models.Mar
 		return "", err
 	}
 
-	required := big.NewInt(constants.AdapterRewardSize)
-
-	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
-	defer cancel()
-
-	allow, err := env.USDC.Allowance(&bind.CallOpts{Context: ctx}, env.ContractAuth.From, common.HexToAddress(constants.AdapterAddressHex))
-	if err != nil {
-		env.Log.Error("allowance check failed", "err", err)
-		return "", err
-	}
-
-	opts := *env.ContractAuth
-	var nonce int64
-	if allow.Cmp(required) < 0 {
-		nonce, err = env.NonceManager.NextBlock(context.Background(), 2)
-		if err != nil {
-			env.Log.Error("failed to get nonce for approve tx", "err", err)
-			return "", err
-		}
-		opts.Nonce = big.NewInt(nonce)
-		nonce++
-
-		env.Log.Info("current allowance insufficient", "current", allow.String(), "required", required.String())
-		env.Log.Info("approving USDC for adapter", "spender", constants.AdapterAddressHex, "amount", required.String())
-
-		txApprove, err := env.USDC.Approve(&opts, common.HexToAddress(constants.AdapterAddressHex), required)
-		if err != nil {
-			env.Log.Error("approve failed", "err", err)
-			return "", err
-		}
-		env.Log.Info("approve tx sent", "tx", txApprove.Hash().Hex())
-
-		if _, err := bind.WaitMined(context.Background(), env.EthHTTP, txApprove); err != nil {
-			env.Log.Error("approve tx failed to mine", "err", err)
-			return "", err
-		}
-	} else {
-		nonce, err = env.NonceManager.NextBlock(context.Background(), 1)
-		if err != nil {
-			env.Log.Error("failed to get nonce for initialize tx", "err", err)
-			return "", err
-		}
-	}
-
 	// TODO: construct data properly
 	ancillaryData := []byte(marketData.Question + "|" + marketData.Description + "|" + string(marketData.Outcomes))
+	nonce, err := env.NonceManager.NextNonce(context.Background())
+	if err != nil {
+		env.Log.Error("failed to get nonce for initialize tx", "err", err)
+		return "", err
+	}
+	opts := *env.ContractAuth
 	opts.Nonce = big.NewInt(nonce)
+
+	reward, err := strconv.Atoi(marketData.UmaReward)
+	if err != nil {
+		env.Log.Error("failed to parse uma reward", "error", err)
+		// don't throw an error to prevent retry with bad data
+		return "", nil
+	}
+	bond, err := strconv.Atoi(marketData.UmaBond)
+	if err != nil {
+		env.Log.Error("failed to parse uma bond", "error", err)
+		// don't throw an error to prevent retry with bad data
+		return "", nil
+	}
+
 	tx, err := env.ContractHTTP.Initialize(
 		&opts,
 		ancillaryData,
 		constants.USDCAddress,
-		big.NewInt(constants.AdapterRewardSize),
-		big.NewInt(constants.AdapterProposalBond),
+		big.NewInt(int64(reward)),
+		big.NewInt(int64(bond)),
 		big.NewInt(constants.AdapterLiveness))
 	if err != nil {
 		env.Log.Error("failed to deploy market contract", "error", err)

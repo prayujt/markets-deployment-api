@@ -5,6 +5,8 @@ import "github.com/ethereum/go-ethereum/common"
 const MarketDeploymentQueueName = "market_deployment_queue"
 const TransactionMonitorQueueName = "transaction_monitor_queue"
 
+const MarketRedisKeyFormat = "market:%s"
+
 type MarketDeploymentStatus string
 
 const (
@@ -23,11 +25,4 @@ const AdapterAddressHex = "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7"
 var USDCAddress = common.HexToAddress("0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359")
 var CTFAddress = common.HexToAddress("0x4D97DCd97eC945f40cF65F87097ACe5EA0476045")
 
-/**
- * TODO: check AdapterRewardSize value
- * is it constant or should it be passed in the request?
- */
-
-const AdapterRewardSize = 1
-const AdapterProposalBond = 500
 const AdapterLiveness = 7200

@@ -16,6 +16,8 @@ type Market struct {
 	Question           string                `json:"question"`
 	Description        string                `json:"description"`
 	Outcomes           json.RawMessage       `json:"outcomes"`
+	UmaBond            string                `json:"uma_bond"`
+	UmaReward          string                `json:"uma_reward"`
 	QuestionID         sql.NullString        `json:"question_id"`
 	ConditionID        sql.NullString        `json:"condition_id"`
 	ClobTokenIds       pqtype.NullRawMessage `json:"clob_token_ids"`

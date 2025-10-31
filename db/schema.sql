@@ -3,6 +3,8 @@ CREATE TABLE markets (
     question TEXT NOT NULL,
     description TEXT NOT NULL,
 	outcomes JSONB NOT NULL,
+    uma_bond TEXT NOT NULL,
+    uma_reward TEXT NOT NULL,
     question_id TEXT NULL,
     condition_id TEXT NULL,
 	clob_token_ids JSONB NULL,
