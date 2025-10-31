@@ -1,5 +1,8 @@
 CREATE TABLE markets (
-    market_id TEXT PRIMARY KEY,
+    id TEXT PRIMARY KEY,
+    question TEXT NOT NULL,
+    description TEXT NOT NULL,
+	outcomes JSONB NOT NULL,
     question_id TEXT NULL,
     condition_id TEXT NULL,
 	clob_token_ids JSONB NULL,

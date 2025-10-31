@@ -8,7 +8,7 @@ import (
 
 	"github.com/gorilla/mux"
 
-	"markets-api/internal/api"
+	"markets-api/internal/handlers"
 )
 
 func main() {
@@ -20,7 +20,7 @@ func main() {
 		w.Write([]byte(`{"status":"ok"}`))
 	}).Methods("GET")
 
-	handler := api.NewClientEnvironment()
+	handler := handlers.NewClientEnvironment()
 	defer handler.QueueClient.Close()
 	log := handler.Log
 	router.HandleFunc("/markets/deploy", handler.QueueDeploymentRequest).Methods("POST")

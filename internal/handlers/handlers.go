@@ -1,4 +1,4 @@
-package api
+package handlers
 
 import (
 	"context"
@@ -10,30 +10,9 @@ import (
 	"github.com/hibiken/asynq"
 
 	"markets-api/internal/constants"
-	"markets-api/internal/environment"
 	"markets-api/internal/models"
 	"markets-api/internal/services"
 )
-
-type ClientEnvironment struct {
-	*environment.ClientEnvironment
-}
-
-type ServerEnvironment struct {
-	*environment.ServerEnvironment
-}
-
-func NewClientEnvironment() *ClientEnvironment {
-	return &ClientEnvironment{
-		ClientEnvironment: environment.NewClientEnvironment(),
-	}
-}
-
-func NewServerEnvironment() *ServerEnvironment {
-	return &ServerEnvironment{
-		ServerEnvironment: environment.NewServerEnvironment(),
-	}
-}
 
 func (env *ClientEnvironment) GetDeploymentStatus(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
@@ -61,6 +40,7 @@ func (env *ClientEnvironment) QueueDeploymentRequest(w http.ResponseWriter, r *h
 		http.Error(w, "missing required fields in request body", http.StatusBadRequest)
 		return
 	}
+	// TODO: do we need to validate market id existence before enqueuing?
 	env.LogWith("market_id", req.MarketID)
 	env.Log.Info("queuing deployment request")
 
@@ -68,10 +48,9 @@ func (env *ClientEnvironment) QueueDeploymentRequest(w http.ResponseWriter, r *h
 	env.Queries.SetMarketPendingDeployment(context.Background(), req.MarketID)
 
 	// enqueue task
-	services.PushToQueue(env.ClientEnvironment, constants.MarketDeploymentQueueName, req)
+	services.PushToQueue(&env.ClientEnvironment.BaseEnvironment, constants.MarketDeploymentQueueName, req)
 
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"message": "deploy request queued"})
+	json.NewEncoder(w).Encode(map[string]string{"message": "market deployment queued"})
 }
 
 func (env *ServerEnvironment) ProcessDeploymentRequest(ctx context.Context, t *asynq.Task) error {
@@ -80,17 +59,41 @@ func (env *ServerEnvironment) ProcessDeploymentRequest(ctx context.Context, t *a
 
 	var req models.MarketDeployRequest
 	if err := json.Unmarshal(t.Payload(), &req); err != nil {
-		return fmt.Errorf("could not decode task payload: %v", err)
+		return fmt.Errorf("could not decode deployment request task payload: %v", err)
 	}
 
 	// update deployment status to deploying
 	env.Queries.SetMarketDeploying(context.Background(), req.MarketID)
 
-	err := services.DeployMarket(env.ServerEnvironment, &req)
+	tx, err := services.RunAdapterInitialize(env.ServerEnvironment, &req)
 	if err != nil {
 		log.Error("failed to deploy market", "error", err)
 		return err
 	}
+
+	services.PushToQueue(&env.ServerEnvironment.BaseEnvironment, constants.TransactionMonitorQueueName, models.TransactionMonitorRequest{
+		MarketID:       req.MarketID,
+		TransactionHex: tx,
+	})
+
+	return nil
+}
+
+func (env *ServerEnvironment) ProcessTransactionMonitorRequest(ctx context.Context, t *asynq.Task) error {
+	log := env.Log
+	log.Info("processing deployment task")
+
+	var req models.TransactionMonitorRequest
+	if err := json.Unmarshal(t.Payload(), &req); err != nil {
+		return fmt.Errorf("could not decode transaction monitor task payload: %v", err)
+	}
+
+	err := services.BlockUntilTransactionMined(env.ServerEnvironment, req.TransactionHex)
+	if err != nil {
+		log.Error("failed to monitor transaction", "error", err)
+		return err
+	}
+	env.Log.Info("market deployed successfully", "market_id", req.MarketID)
 
 	return nil
 }

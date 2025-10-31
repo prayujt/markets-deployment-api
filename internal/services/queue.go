@@ -9,7 +9,7 @@ import (
 	"markets-api/internal/environment"
 )
 
-func PushToQueue(env *environment.ClientEnvironment, queueName string, payload any) error {
+func PushToQueue(env *environment.BaseEnvironment, queueName string, payload any) error {
 	data, err := json.Marshal(payload)
 	if err != nil {
 		return err
@@ -20,7 +20,7 @@ func PushToQueue(env *environment.ClientEnvironment, queueName string, payload a
 }
 
 // UNUSED
-func SetKey(env *environment.ClientEnvironment, key string, value any) error {
+func SetKey(env *environment.BaseEnvironment, key string, value any) error {
 	data, err := json.Marshal(value)
 	if err != nil {
 		return err
@@ -28,7 +28,7 @@ func SetKey(env *environment.ClientEnvironment, key string, value any) error {
 	return env.RedisClient.Set(context.Background(), key, data, 0).Err()
 }
 
-func GetKey[T any](env *environment.ClientEnvironment, key string) (*T, error) {
+func GetKey[T any](env *environment.BaseEnvironment, key string) (*T, error) {
 	data, err := env.RedisClient.Get(context.Background(), key).Bytes()
 	if err != nil {
 		return nil, err

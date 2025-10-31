@@ -1,8 +1,9 @@
 package constants
 
-const MarketDeploymentQueueName = "market_deployment_queue"
+import "github.com/ethereum/go-ethereum/common"
 
-const MarketDeploymentStatusFormat = "deployment_status:%s"
+const MarketDeploymentQueueName = "market_deployment_queue"
+const TransactionMonitorQueueName = "transaction_monitor_queue"
 
 type MarketDeploymentStatus string
 
@@ -11,3 +12,18 @@ const (
 	MarketDeploymentStatusDeploying MarketDeploymentStatus = "DEPLOYING"
 	MarketDeploymentStatusDeployed  MarketDeploymentStatus = "DEPLOYED"
 )
+
+const AdapterAddressHex = "0x65070BE91477460D8A7AeEb94ef92fe056C2f2A7"
+
+var USDCAddress = common.HexToAddress("0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582")
+
+// var USDCAddress = common.HexToAddress("0x2791Bca1f2de4661ED88A30C99A7a9449Aa84174")
+
+/**
+ * TODO: check Adapter* values
+ * are they constant or should they be passed in the request?
+ */
+
+const AdapterRewardSize = 1
+const AdapterProposalBond = 500
+const AdapterLiveness = 7200
