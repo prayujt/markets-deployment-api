@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
@@ -18,6 +19,7 @@ import (
 	"markets-api/internal/database"
 	"markets-api/internal/environment"
 	"markets-api/internal/models"
+	"markets-api/internal/utils"
 )
 
 func RunAdapterInitialize(env *environment.ServerEnvironment, market *models.MarketDeployRequest) (string, error) {
@@ -118,29 +120,38 @@ func ParseInitializeReceipt(env *environment.ServerEnvironment, receipt *types.R
 	timestamp := time.Unix(int64(block.Time()), 0)
 
 	for _, rLog := range receipt.Logs {
-		event, err := env.ContractHTTP.ParseQuestionInitialized(*rLog)
+		event, err := env.CTF.ParseConditionPreparation(*rLog)
 		if err != nil {
 			continue
 		}
-		questionID := "0x" + common.Bytes2Hex(event.QuestionID[:])
-		env.Log.Info("parsed QuestionInitialized event", "question_id", questionID)
+		questionID := "0x" + common.Bytes2Hex(event.QuestionId[:])
+		conditionID := "0x" + common.Bytes2Hex(event.ConditionId[:])
+		env.Log.Info("successfully parsed ConditionPreparation event", "question_id", questionID, "condition_id", conditionID)
 		return &models.AdapterEventData{
 			QuestionID:        questionID,
+			ConditionID:       conditionID,
 			DeployedTimestamp: timestamp,
 		}, nil
 	}
-	env.Log.Error("could not find QuestionInitialized event in receipt logs")
-	return nil, fmt.Errorf("could not find QuestionInitialized event in receipt logs")
+	env.Log.Error("could not find ConditionPreparation event in receipt logs")
+	return nil, fmt.Errorf("could not find ConditionPreparation event in receipt logs")
 }
 
 func CompleteMarketDeployment(env *environment.ServerEnvironment, marketID string, data *models.AdapterEventData) error {
-	err := env.Queries.SetMarketDeployed(context.Background(), database.SetMarketDeployedParams{
+	positionIDs := utils.CalculatePositionIDs(constants.USDCAddress, common.HexToHash(data.ConditionID))
+	positionsJson, err := json.Marshal(positionIDs)
+	if err != nil {
+		env.Log.Error("failed to marshal position IDs", "error", err)
+		return err
+	}
+
+	err = env.Queries.SetMarketDeployed(context.Background(), database.SetMarketDeployedParams{
 		ID:          marketID,
 		QuestionID:  sql.NullString{Valid: true, String: data.QuestionID},
-		ConditionID: sql.NullString{Valid: true, String: "sample_condition_id"},
+		ConditionID: sql.NullString{Valid: true, String: data.ConditionID},
 		ClobTokenIds: pqtype.NullRawMessage{
 			Valid:      true,
-			RawMessage: []byte(`["token1","token2"]`),
+			RawMessage: positionsJson,
 		},
 		DeployedTimestamp: sql.NullTime{
 			Valid: true,
@@ -151,6 +162,6 @@ func CompleteMarketDeployment(env *environment.ServerEnvironment, marketID strin
 		env.Log.Error("failed to update deployment status in database", "error", err)
 		return err
 	}
-	env.Log.Info("market deployment completed", "questionID", marketID)
+	env.Log.Info("market deployment completed", "market_id", marketID)
 	return nil
 }

@@ -44,6 +44,7 @@ type ServerEnvironment struct {
 	EthHTTP      *ethclient.Client
 	EthWS        *ethclient.Client
 	USDC         *contracts.USDC
+	CTF          *contracts.CTF
 	ContractHTTP *contracts.Market
 	ContractWS   *contracts.Market
 	ContractAuth *bind.TransactOpts
@@ -138,6 +139,12 @@ func NewServerEnvironment() *ServerEnvironment {
 		os.Exit(1)
 	}
 
+	ctfContract, err := contracts.NewCTF(constants.CTFAddress, httpClient)
+	if err != nil {
+		env.Log.Error("failed ctf contract", "error", err)
+		os.Exit(1)
+	}
+
 	contractAddr := common.HexToAddress(constants.AdapterAddressHex)
 	contractHTTP, err := contracts.NewMarket(contractAddr, httpClient)
 	if err != nil {
@@ -176,6 +183,7 @@ func NewServerEnvironment() *ServerEnvironment {
 		EthHTTP:         httpClient,
 		EthWS:           wsClient,
 		USDC:            usdcContract,
+		CTF:             ctfContract,
 		ContractHTTP:    contractHTTP,
 		ContractWS:      contractWS,
 		ContractAuth:    contractAuth,
