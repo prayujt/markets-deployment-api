@@ -88,11 +88,25 @@ func (env *ServerEnvironment) ProcessTransactionMonitorRequest(ctx context.Conte
 		return fmt.Errorf("could not decode transaction monitor task payload: %v", err)
 	}
 
-	err := services.BlockUntilTransactionMined(env.ServerEnvironment, req.TransactionHex)
+	receipt, err := services.BlockUntilTransactionMined(env.ServerEnvironment, req.TransactionHex)
 	if err != nil {
 		log.Error("failed to monitor transaction", "error", err)
 		return err
 	}
+
+	data, err := services.ParseInitializeReceipt(env.ServerEnvironment, receipt)
+	if err != nil {
+		log.Error("failed to parse initialize receipt", "error", err)
+		return err
+	}
+
+	// update market record
+	err = services.CompleteMarketDeployment(env.ServerEnvironment, req.MarketID, data)
+	if err != nil {
+		log.Error("failed to update records in database", "error", err)
+		return err
+	}
+
 	env.Log.Info("market deployed successfully", "market_id", req.MarketID)
 
 	return nil

@@ -19,8 +19,8 @@ WHERE id = $1;
 UPDATE markets
 SET deploying = FALSE,
     pending_deployment = FALSE,
-    deployed_timestamp = NOW(),
-    question_id = $2,
-    condition_id = $3,
-	clob_token_ids = $4
+    deployed_timestamp = $2,
+    question_id = $3,
+    condition_id = $4,
+	clob_token_ids = $5
 WHERE id = $1;

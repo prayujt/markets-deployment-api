@@ -41,23 +41,25 @@ const setMarketDeployed = `-- name: SetMarketDeployed :exec
 UPDATE markets
 SET deploying = FALSE,
     pending_deployment = FALSE,
-    deployed_timestamp = NOW(),
-    question_id = $2,
-    condition_id = $3,
-	clob_token_ids = $4
+    deployed_timestamp = $2,
+    question_id = $3,
+    condition_id = $4,
+	clob_token_ids = $5
 WHERE id = $1
 `
 
 type SetMarketDeployedParams struct {
-	ID           string                `json:"id"`
-	QuestionID   sql.NullString        `json:"question_id"`
-	ConditionID  sql.NullString        `json:"condition_id"`
-	ClobTokenIds pqtype.NullRawMessage `json:"clob_token_ids"`
+	ID                string                `json:"id"`
+	DeployedTimestamp sql.NullTime          `json:"deployed_timestamp"`
+	QuestionID        sql.NullString        `json:"question_id"`
+	ConditionID       sql.NullString        `json:"condition_id"`
+	ClobTokenIds      pqtype.NullRawMessage `json:"clob_token_ids"`
 }
 
 func (q *Queries) SetMarketDeployed(ctx context.Context, arg SetMarketDeployedParams) error {
 	_, err := q.db.ExecContext(ctx, setMarketDeployed,
 		arg.ID,
+		arg.DeployedTimestamp,
 		arg.QuestionID,
 		arg.ConditionID,
 		arg.ClobTokenIds,

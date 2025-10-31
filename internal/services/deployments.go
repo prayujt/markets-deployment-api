@@ -73,7 +73,7 @@ func RunAdapterInitialize(env *environment.ServerEnvironment, market *models.Mar
 	return hex, nil
 }
 
-func BlockUntilTransactionMined(env *environment.ServerEnvironment, hex string) error {
+func BlockUntilTransactionMined(env *environment.ServerEnvironment, hex string) (*types.Receipt, error) {
 	hash := common.HexToHash(hex)
 	var receipt *types.Receipt
 
@@ -84,7 +84,7 @@ func BlockUntilTransactionMined(env *environment.ServerEnvironment, hex string) 
 	for {
 		select {
 		case <-outerCtx.Done():
-			return fmt.Errorf("timed out waiting for transaction to be mined: %w", outerCtx.Err())
+			return nil, fmt.Errorf("timed out waiting for transaction to be mined: %w", outerCtx.Err())
 		default:
 		}
 
@@ -97,40 +97,60 @@ func BlockUntilTransactionMined(env *environment.ServerEnvironment, hex string) 
 				time.Sleep(2 * time.Second)
 				continue
 			}
-			return fmt.Errorf("failed to get transaction receipt: %v", err)
+			return nil, fmt.Errorf("failed to get transaction receipt: %v", err)
 		}
 		receipt = r
 		break
 	}
 	if receipt.Status != types.ReceiptStatusSuccessful {
-		return fmt.Errorf("transaction failed with status: %v", receipt.Status)
+		return nil, fmt.Errorf("transaction failed with status: %v", receipt.Status)
 	}
 
-	return nil
+	return receipt, nil
 }
 
-// func SubscribeMarketDeployments(env *environment.ServerEnvironment, events chan *contracts.ContractsMarketDeployed) (event.Subscription, error) {
-// 	sub, err := env.ContractWS.WatchMarketDeployed(&bind.WatchOpts{Context: context.Background()}, events, nil)
-// 	if err != nil {
-// 		env.Log.Error("failed to subscribe to MarketDeployed events", "error", err)
-// 		return nil, err
-// 	}
-// 	return sub, nil
-// }
+func ParseInitializeReceipt(env *environment.ServerEnvironment, receipt *types.Receipt) (*models.AdapterEventData, error) {
+	block, err := env.EthHTTP.BlockByNumber(context.Background(), receipt.BlockNumber)
+	if err != nil {
+		env.Log.Error("failed to fetch block data", "error", err)
+		return nil, err
+	}
+	timestamp := time.Unix(int64(block.Time()), 0)
 
-func CompleteMarketDeployment(env *environment.ServerEnvironment, marketID string) {
+	for _, rLog := range receipt.Logs {
+		event, err := env.ContractHTTP.ParseQuestionInitialized(*rLog)
+		if err != nil {
+			continue
+		}
+		questionID := "0x" + common.Bytes2Hex(event.QuestionID[:])
+		env.Log.Info("parsed QuestionInitialized event", "question_id", questionID)
+		return &models.AdapterEventData{
+			QuestionID:        questionID,
+			DeployedTimestamp: timestamp,
+		}, nil
+	}
+	env.Log.Error("could not find QuestionInitialized event in receipt logs")
+	return nil, fmt.Errorf("could not find QuestionInitialized event in receipt logs")
+}
+
+func CompleteMarketDeployment(env *environment.ServerEnvironment, marketID string, data *models.AdapterEventData) error {
 	err := env.Queries.SetMarketDeployed(context.Background(), database.SetMarketDeployedParams{
 		ID:          marketID,
-		QuestionID:  sql.NullString{Valid: true, String: "sample_question_id"},
+		QuestionID:  sql.NullString{Valid: true, String: data.QuestionID},
 		ConditionID: sql.NullString{Valid: true, String: "sample_condition_id"},
 		ClobTokenIds: pqtype.NullRawMessage{
 			Valid:      true,
 			RawMessage: []byte(`["token1","token2"]`),
 		},
+		DeployedTimestamp: sql.NullTime{
+			Valid: true,
+			Time:  data.DeployedTimestamp,
+		},
 	})
 	if err != nil {
 		env.Log.Error("failed to update deployment status in database", "error", err)
-		return
+		return err
 	}
 	env.Log.Info("market deployment completed", "questionID", marketID)
+	return nil
 }
