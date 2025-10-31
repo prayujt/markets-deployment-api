@@ -30,11 +30,7 @@ func main() {
 		defer sub.Unsubscribe()
 
 		for event := range marketDeployments {
-			log.Info("received MarketDeployed event", "questionID", event.QuestionId)
-			if !env.QuestionIDSet.Contains(event.QuestionId) {
-				log.Info("questionID not in deployment set, skipping", "questionID", event.QuestionId)
-				continue
-			}
+			log.Info("received MarketDeployed event", "question_id", event.QuestionId)
 			services.CompleteMarketDeployment(env.ServerEnvironment, event.QuestionId)
 		}
 	}()

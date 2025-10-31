@@ -2,11 +2,12 @@ package services
 
 import (
 	"context"
+	"database/sql"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind/v2"
 	"github.com/ethereum/go-ethereum/event"
+	"github.com/sqlc-dev/pqtype"
 
-	"markets-api/internal/constants"
 	"markets-api/internal/contracts"
 	"markets-api/internal/database"
 	"markets-api/internal/environment"
@@ -14,7 +15,7 @@ import (
 )
 
 func DeployMarket(env *environment.ServerEnvironment, market *models.MarketDeployRequest) error {
-	tx, err := env.ContractHTTP.DeployMarket(env.ContractAuth, market.QuestionID, market.ConditionID, market.PositionIDYes, market.PositionIDNo)
+	tx, err := env.ContractHTTP.DeployMarket(env.ContractAuth, "", "", "", "")
 	if err != nil {
 		env.Log.Error("failed to deploy market contract", "error", err)
 		return err
@@ -32,14 +33,19 @@ func SubscribeMarketDeployments(env *environment.ServerEnvironment, events chan 
 	return sub, nil
 }
 
-func CompleteMarketDeployment(env *environment.ServerEnvironment, questionID string) {
-	err := env.Queries.UpdateDeploymentStatus(context.Background(), database.UpdateDeploymentStatusParams{
-		QuestionID: questionID,
-		Status:     string(constants.MarketDeploymentStatusDeployed),
+func CompleteMarketDeployment(env *environment.ServerEnvironment, marketID string) {
+	err := env.Queries.SetMarketDeployed(context.Background(), database.SetMarketDeployedParams{
+		MarketID:    marketID,
+		QuestionID:  sql.NullString{Valid: true, String: "sample_question_id"},
+		ConditionID: sql.NullString{Valid: true, String: "sample_condition_id"},
+		ClobTokenIds: pqtype.NullRawMessage{
+			Valid:      true,
+			RawMessage: []byte(`["token1","token2"]`),
+		},
 	})
 	if err != nil {
 		env.Log.Error("failed to update deployment status in database", "error", err)
 		return
 	}
-	env.Log.Info("market deployment completed", "questionID", questionID)
+	env.Log.Info("market deployment completed", "questionID", marketID)
 }

@@ -10,7 +10,6 @@ import (
 	"github.com/hibiken/asynq"
 
 	"markets-api/internal/constants"
-	"markets-api/internal/database"
 	"markets-api/internal/environment"
 	"markets-api/internal/models"
 	"markets-api/internal/services"
@@ -39,16 +38,15 @@ func NewServerEnvironment() *ServerEnvironment {
 func (env *ClientEnvironment) GetDeploymentStatus(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 
-	questionID := vars["questionID"]
-	status, err := env.Queries.GetDeploymentStatus(context.Background(), questionID)
+	marketID := vars["marketID"]
+	market, err := env.Queries.GetMarketByID(context.Background(), marketID)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("could not get deployment status: %v", err), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("could not get market details: %v", err), http.StatusInternalServerError)
 		return
 	}
 
 	res := models.DeploymentStatusResponse{
-		QuestionID: questionID,
-		Status:     status,
+		Status: string(getMarketDeploymentStatus(market)),
 	}
 	json.NewEncoder(w).Encode(res)
 }
@@ -59,22 +57,15 @@ func (env *ClientEnvironment) QueueDeploymentRequest(w http.ResponseWriter, r *h
 		http.Error(w, fmt.Sprintf("could not decode reqeust body: %v", err), http.StatusBadRequest)
 		return
 	}
-	// TODO: add cleaner validator
-	if req.QuestionID == "" || req.ConditionID == "" || req.PositionIDYes == "" || req.PositionIDNo == "" {
+	if req.MarketID == "" {
 		http.Error(w, "missing required fields in request body", http.StatusBadRequest)
 		return
 	}
-	env.Log = env.Log.With("questionID", req.QuestionID, "conditionID", req.ConditionID)
-	env.Log.Info("queuing deployment request", "questionID", req.QuestionID, "conditionID", req.ConditionID)
+	env.LogWith("market_id", req.MarketID)
+	env.Log.Info("queuing deployment request")
 
 	// initialize deployment record
-	env.Queries.CreateDeployment(context.Background(), database.CreateDeploymentParams{
-		QuestionID:    req.QuestionID,
-		ConditionID:   req.ConditionID,
-		PositionIDYes: req.PositionIDYes,
-		PositionIDNo:  req.PositionIDNo,
-		Status:        string(constants.MarketDeploymentStatusQueued),
-	})
+	env.Queries.SetMarketPendingDeployment(context.Background(), req.MarketID)
 
 	// enqueue task
 	services.PushToQueue(env.ClientEnvironment, constants.MarketDeploymentQueueName, req)
@@ -91,14 +82,9 @@ func (env *ServerEnvironment) ProcessDeploymentRequest(ctx context.Context, t *a
 	if err := json.Unmarshal(t.Payload(), &req); err != nil {
 		return fmt.Errorf("could not decode task payload: %v", err)
 	}
-	// add to set to track active deployments from this instance
-	env.QuestionIDSet.Add(req.QuestionID)
 
 	// update deployment status to deploying
-	env.Queries.UpdateDeploymentStatus(context.Background(), database.UpdateDeploymentStatusParams{
-		QuestionID: req.QuestionID,
-		Status:     string(constants.MarketDeploymentStatusDeploying),
-	})
+	env.Queries.SetMarketDeploying(context.Background(), req.MarketID)
 
 	err := services.DeployMarket(env.ServerEnvironment, &req)
 	if err != nil {

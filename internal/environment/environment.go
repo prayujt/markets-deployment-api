@@ -29,6 +29,10 @@ type BaseEnvironment struct {
 	Queries     *database.Queries
 }
 
+func (env *BaseEnvironment) LogWith(attrs ...any) {
+	env.Log = env.Log.With(attrs...)
+}
+
 type ClientEnvironment struct {
 	BaseEnvironment
 	QueueClient *asynq.Client
@@ -158,6 +162,7 @@ func NewServerEnvironment() *ServerEnvironment {
 		}
 	}
 
+	// TODO: maybe replace QuestionIDSet with a mapping between tx hash and market ID
 	return &ServerEnvironment{BaseEnvironment: env, QueueServer: srv, ContractHTTP: contractHTTP, ContractWS: contractWS, ContractAuth: contractAuth, QuestionIDSet: utils.NewSet()}
 }
 

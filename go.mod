@@ -8,7 +8,7 @@ require (
 	github.com/hibiken/asynq v0.25.1
 	github.com/lib/pq v1.10.9
 	github.com/redis/go-redis/v9 v9.16.0
-	golang.org/x/exp v0.0.0-20230626212559-97b1e661b5df
+	github.com/sqlc-dev/pqtype v0.3.0
 )
 
 require (

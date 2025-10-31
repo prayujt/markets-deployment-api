@@ -1,7 +1,10 @@
-CREATE TABLE deployments (
-    question_id TEXT PRIMARY KEY,
-    condition_id TEXT NOT NULL,
-    position_id_yes TEXT NOT NULL,
-    position_id_no TEXT NOT NULL,
-    status TEXT NOT NULL
+CREATE TABLE markets (
+    market_id TEXT PRIMARY KEY,
+    question_id TEXT NULL,
+    condition_id TEXT NULL,
+	clob_token_ids JSONB NULL,
+    pending_deployment BOOLEAN NOT NULL,
+    deploying BOOLEAN NOT NULL,
+    deploying_timestamp TIMESTAMP NULL,
+    deployed_timestamp TIMESTAMP NULL
 );
