@@ -1,7 +1,6 @@
 package models
 
 import (
-	"encoding/json"
 	"time"
 )
 
@@ -17,7 +16,6 @@ type TransactionMonitorRequest struct {
 type AdapterEventData struct {
 	QuestionID        string
 	ConditionID       string
-	TokenIds          json.RawMessage
 	DeployedTimestamp time.Time
 }
 

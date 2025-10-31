@@ -41,6 +41,7 @@ type ClientEnvironment struct {
 type ServerEnvironment struct {
 	BaseEnvironment
 	QueueServer  *asynq.Server
+	NonceManager *NonceManager
 	EthHTTP      *ethclient.Client
 	EthWS        *ethclient.Client
 	USDC         *contracts.USDC
@@ -91,7 +92,12 @@ func NewEnvironment() BaseEnvironment {
 	}
 	queries := database.New(db)
 
-	return BaseEnvironment{Log: base, RedisClient: redisClient, QueueClient: clientQueue, Queries: queries}
+	return BaseEnvironment{
+		Log:         base,
+		RedisClient: redisClient,
+		QueueClient: clientQueue,
+		Queries:     queries,
+	}
 }
 
 func NewClientEnvironment() *ClientEnvironment {
@@ -177,9 +183,16 @@ func NewServerEnvironment() *ServerEnvironment {
 		}
 	}
 
+	nonceMgr, err := NewNonceManager(httpClient, contractAuth.From, env.Log)
+	if err != nil {
+		env.Log.Error("nonce manager create failed", "err", err)
+		os.Exit(1)
+	}
+
 	return &ServerEnvironment{
 		BaseEnvironment: env,
 		QueueServer:     serverQueue,
+		NonceManager:    nonceMgr,
 		EthHTTP:         httpClient,
 		EthWS:           wsClient,
 		USDC:            usdcContract,

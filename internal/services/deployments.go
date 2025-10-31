@@ -40,11 +40,21 @@ func RunAdapterInitialize(env *environment.ServerEnvironment, market *models.Mar
 		return "", err
 	}
 
+	opts := *env.ContractAuth
+	var nonce int64
 	if allow.Cmp(required) < 0 {
+		nonce, err = env.NonceManager.NextBlock(context.Background(), 2)
+		if err != nil {
+			env.Log.Error("failed to get nonce for approve tx", "err", err)
+			return "", err
+		}
+		opts.Nonce = big.NewInt(nonce)
+		nonce++
+
 		env.Log.Info("current allowance insufficient", "current", allow.String(), "required", required.String())
 		env.Log.Info("approving USDC for adapter", "spender", constants.AdapterAddressHex, "amount", required.String())
 
-		txApprove, err := env.USDC.Approve(env.ContractAuth, common.HexToAddress(constants.AdapterAddressHex), required)
+		txApprove, err := env.USDC.Approve(&opts, common.HexToAddress(constants.AdapterAddressHex), required)
 		if err != nil {
 			env.Log.Error("approve failed", "err", err)
 			return "", err
@@ -55,12 +65,19 @@ func RunAdapterInitialize(env *environment.ServerEnvironment, market *models.Mar
 			env.Log.Error("approve tx failed to mine", "err", err)
 			return "", err
 		}
+	} else {
+		nonce, err = env.NonceManager.NextBlock(context.Background(), 1)
+		if err != nil {
+			env.Log.Error("failed to get nonce for initialize tx", "err", err)
+			return "", err
+		}
 	}
 
 	// TODO: construct data properly
 	ancillaryData := []byte(marketData.Question + "|" + marketData.Description + "|" + string(marketData.Outcomes))
+	opts.Nonce = big.NewInt(nonce)
 	tx, err := env.ContractHTTP.Initialize(
-		env.ContractAuth,
+		&opts,
 		ancillaryData,
 		constants.USDCAddress,
 		big.NewInt(constants.AdapterRewardSize),

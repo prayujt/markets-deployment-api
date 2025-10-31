@@ -7,4 +7,6 @@
 bin/*
 !bin/.keep
 
+scripts/
+
 .env
